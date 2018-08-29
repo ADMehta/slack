@@ -1,4 +1,4 @@
-# slack App
+# Slack App
 
 ## Insight into the App, what it does!
 Purpose : To get real time weather data for your city and posts a message in #bring-an-umbrella slack channel if the rain Precipitation is > 0.0
