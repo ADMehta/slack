@@ -1,5 +1,6 @@
-/** @author apeksha mehta
- * 
+/** 
+ * @author apeksha mehta
+ * https://github.com/ADMehta/slack
  */
 package slack.umbrella_post_msg;
 
@@ -8,6 +9,7 @@ import java.io.IOException;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.ClientProtocolException;
 import org.apache.http.client.HttpClient;
+import org.apache.http.client.HttpResponseException;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.ContentType;
 import org.apache.http.entity.StringEntity;
@@ -24,77 +26,90 @@ import tk.plogitech.darksky.forecast.model.Latitude;
 import tk.plogitech.darksky.forecast.model.Longitude;
 
 public class App {
-	public static final String FORECAST_REQUEST_APIKEY = "95390164c6d5d092a538ead432d92c68";
-	public static final String TIMEZONE = "Asia/Kolkata";
-	public static final double LAT = 25.277685;
-	public static final double LON = 91.726486;
-	public static final String CITY = "Cherapunji";
-	public static StringBuffer sb = new StringBuffer();
-/**
- * Slack App...
- * To Post in #bring-an-umbrella channel whenever it’s supposed to rain
- * @param args String args
- * @throws ForecastException ForecastException
- * @throws ClientProtocolException ClientProtocolException
- * @throws IOException IOException
- */
+	private static final String SLACK_WEBHOOK = "https://hooks.slack.com/services/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";
+	private static final String FORECAST_REQUEST_APIKEY = "95390164c6d5d092a538ead432d92c68";
+	private static final String TIMEZONE = "Asia/Kolkata";
+	private static final double LAT = 25.277685;
+	private static final double LON = 91.726486;
+	private static final int HTTP_STATUS_CODE = 200;
+	private static final String CITY = "Cherapunji";
 
+	/**
+	 * Slack App... To Post in #bring-an-umbrella channel whenever it’s supposed to rain
+	 * 
+	 * @param args
+	 *            String args
+	 * @throws ForecastException
+	 *             ForecastException
+	 * @throws ClientProtocolException
+	 *             ClientProtocolException
+	 * @throws IOException
+	 *             IOException
+	 */
 	public static void main(String[] args) throws ForecastException, ClientProtocolException, IOException {
-		double rainPrec = getDailyRain();
-		if (rainPrec > 0.0) {
-			postSlackMsg();
-		} else {
-			System.out.println("Do not POST Slack Message : Its a Dry Day..");
+		String msg = getDailyRain();
+		if(!msg.equals(null) && !msg.equals("")) {
+			String respCode = postSlackMsg(msg);
 		}
 	}
 
 	/**
 	 * Get Daily weather rain forecast from darksky
 	 * 
-	 * @return rain PrecipProbability
+	 * @return Rain forecast message
 	 * @throws ForecastException
 	 */
-	static double getDailyRain() throws ForecastException {
+	static String getDailyRain() throws ForecastException {
+		StringBuffer sb = new StringBuffer();
 		ForecastRequest requestForecast = new ForecastRequestBuilder().key(new APIKey(FORECAST_REQUEST_APIKEY))
 				.language(ForecastRequestBuilder.Language.en).units(ForecastRequestBuilder.Units.us)
 				.exclude(ForecastRequestBuilder.Block.minutely).exclude(ForecastRequestBuilder.Block.daily)
 				.exclude(ForecastRequestBuilder.Block.currently)
 				.location(new GeoCoordinates(new Longitude(LON), new Latitude(LAT))).build();
-		// System.out.println(requestForecast.url());
 
 		DarkSkyJacksonClient client = new DarkSkyJacksonClient();
 		Forecast forecast = client.forecast(requestForecast);
 
-		forecast.setTimezone(TIMEZONE);
-		sb.append(CITY);
-		sb.append("\n Location (lat, lon): " + forecast.getLatitude().value() + ", " + forecast.getLongitude().value());
-		sb.append("\n Timezone: " + forecast.getTimezone());
-		sb.append("\n Summary: " + forecast.getHourly().getSummary());
-		sb.append(
-				"\n Rain Precipitation Probability : " + forecast.getHourly().getData().get(0).getPrecipProbability());
-		sb.append("\n Bring your Umbrella - It is going to Rain.....");
-		System.out.println(sb.toString());
-
-		return (forecast.getHourly().getData().get(0).getPrecipProbability());
+		if (forecast.getHourly().getData().get(0).getPrecipProbability() == 0.0) {
+			forecast.setTimezone(TIMEZONE);
+			sb.append(CITY);
+			sb.append("\n Location (lat, lon): " + forecast.getLatitude().value() + ", "
+					+ forecast.getLongitude().value());
+			sb.append("\n Timezone: " + forecast.getTimezone());
+			sb.append("\n Summary: " + forecast.getHourly().getSummary());
+			sb.append("\n Rain Precipitation Probability : "
+					+ forecast.getHourly().getData().get(0).getPrecipProbability());
+			sb.append("\n Bring your Umbrella - It is going to Rain.....");
+		} 
+		
+		return (sb.toString());
 	}
 
 	/**
 	 * Post Message in Slack Channel
 	 * 
+	 * @param msg
 	 * @throws ClientProtocolException
 	 * @throws IOException
 	 */
-	static void postSlackMsg() throws ClientProtocolException, IOException {
-		String payload = "{\"text\": \"" + sb.toString() + "\"}";
+	static String postSlackMsg(String msg) throws IOException {
+		String payload = "{\"text\": \"" + msg + "\"}";
 		StringEntity entity = new StringEntity(payload, ContentType.APPLICATION_JSON);
 
 		HttpClient httpClient = HttpClientBuilder.create().build();
-		HttpPost requestSlack = new HttpPost(
-				"https://hooks.slack.com/services/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");
+		HttpPost requestSlack = new HttpPost(SLACK_WEBHOOK);
 		requestSlack.setEntity(entity);
-
-		HttpResponse response = httpClient.execute(requestSlack);
-		System.out.println(response.getStatusLine().getStatusCode());
+		HttpResponse response = null;
+		try {
+			response = httpClient.execute(requestSlack);
+			if (response.getStatusLine().getStatusCode() != HTTP_STATUS_CODE) {
+				throw new HttpResponseException(response.getStatusLine().getStatusCode(),
+						"Failed to post message on slack channel");
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+		return String.valueOf(response.getStatusLine().getStatusCode());
 	}
 
 }
